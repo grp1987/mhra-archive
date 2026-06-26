@@ -26,6 +26,12 @@ if (-not (Test-Path $py)) { $py = "python" }
 Write-Host "--- installing deps ---"
 & $py -m pip install -q -r (Join-Path $PSScriptRoot 'requirements.txt')
 
+# --- self-signed TLS cert (so the passcode is encrypted on the bare IP) ---
+try { $ip = (Invoke-RestMethod -Uri 'https://api.ipify.org' -TimeoutSec 8).Trim() }
+catch { $ip = 'localhost' }
+Write-Host "--- generating self-signed cert for $ip ---"
+& $py (Join-Path $PSScriptRoot 'gen_cert.py') $ip
+
 # --- firewall (idempotent) ---
 if (-not (Get-NetFirewallRule -DisplayName "MHRA Archive $Port" -ErrorAction SilentlyContinue)) {
     New-NetFirewallRule -DisplayName "MHRA Archive $Port" -Direction Inbound -Action Allow `
@@ -56,6 +62,7 @@ Set-ScheduledTask -TaskName $Task -Action $action2 | Out-Null
 
 Start-ScheduledTask -TaskName $Task
 Start-Sleep 3
-Write-Host "`nServing on  http://<this-VPS-public-IP>:$Port   (passcode gate ON)" -ForegroundColor Cyan
+Write-Host "`nServing on  https://${ip}:$Port   (TLS self-signed + passcode gate ON)" -ForegroundColor Cyan
+Write-Host "(browser will warn 'not trusted' once for the self-signed cert - click through; the connection is encrypted)" -ForegroundColor DarkGray
 Write-Host "Stop with:   Stop-ScheduledTask -TaskName $Task ; Unregister-ScheduledTask -TaskName $Task -Confirm:`$false"
 Write-Host "Update DB:   git pull  (then)  Restart-ScheduledTask -TaskName $Task"
