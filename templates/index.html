@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MHRA Archive</title>
+<style>
+  :root{--bg:#0f1115;--panel:#171a21;--border:#2a2f3a;--fg:#e6e9ef;--muted:#8b93a3;
+        --accent:#4f8cff;--spc:#4f8cff;--pil:#3fbf7f;--par:#c08cff;
+        --new:#3fbf7f;--changed:#f0b429;--removed:#e85d5d}
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+       background:var(--bg);color:var(--fg)}
+  header{padding:14px 22px;border-bottom:1px solid var(--border);display:flex;
+         align-items:baseline;gap:14px;flex-wrap:wrap;background:var(--panel)}
+  header h1{font-size:18px;margin:0;font-weight:650}
+  header .stats{color:var(--muted);font-size:13px}
+  .tabs{display:flex;gap:4px;margin-left:auto}
+  .tabs button{background:none;border:1px solid var(--border);color:var(--muted);
+       padding:6px 14px;border-radius:7px;cursor:pointer;font-size:14px}
+  .tabs button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  main{padding:18px 22px;max-width:1200px;margin:0 auto}
+  .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+  input[type=search]{flex:1;min-width:260px;padding:10px 14px;border-radius:9px;
+       border:1px solid var(--border);background:var(--panel);color:var(--fg);font-size:15px}
+  select{padding:10px;border-radius:9px;border:1px solid var(--border);
+       background:var(--panel);color:var(--fg)}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th{text-align:left;color:var(--muted);font-weight:550;padding:8px 10px;
+     border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg)}
+  td{padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+  tr:hover td{background:#1b1f28}
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600}
+  .Spc{background:rgba(79,140,255,.18);color:var(--spc)}
+  .Pil{background:rgba(63,191,127,.18);color:var(--pil)}
+  .Par{background:rgba(192,140,255,.18);color:var(--par)}
+  .kind-new{color:var(--new)} .kind-changed{color:var(--changed)} .kind-removed{color:var(--removed)}
+  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+  .muted{color:var(--muted)} .pl{font-family:ui-monospace,monospace;font-size:12.5px}
+  .pager{display:flex;gap:10px;align-items:center;margin-top:16px}
+  .pager button{padding:7px 16px;border-radius:8px;border:1px solid var(--border);
+       background:var(--panel);color:var(--fg);cursor:pointer}
+  .local{font-size:11px;color:var(--pil);border:1px solid rgba(63,191,127,.4);
+       padding:1px 6px;border-radius:5px;margin-left:6px}
+  .empty{color:var(--muted);padding:40px;text-align:center}
+  .cls{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600}
+  .cls-UK{background:rgba(139,147,163,.16);color:#aeb6c6}
+  .cls-PI{background:rgba(240,180,41,.16);color:var(--changed)}
+  .pis-toggle{cursor:pointer;font-size:13px;white-space:nowrap}
+  .pirow td{background:#12151c;padding:0}
+  .pinner{padding:8px 10px 12px 28px}
+  .pinner h4{margin:4px 0 8px;font-size:12.5px;color:var(--muted);font-weight:600}
+  .pinner table{font-size:13px} .pinner td{border-bottom:1px solid #20242e}
+  .pager-btn{padding:8px 14px;border-radius:8px;border:1px solid var(--border);
+       background:var(--panel);color:var(--fg);cursor:pointer;font-size:13px}
+  .pager-btn:hover{border-color:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <h1>MHRA Archive</h1>
+  <span class="stats" id="stats">loading…</span>
+  <div class="tabs">
+    <button class="on" data-tab="search">Search</button>
+    <button data-tab="changes">Changes</button>
+  </div>
+</header>
+<main>
+  <div id="search-view">
+    <div class="bar">
+      <input type="search" id="q" placeholder="product, active substance, or PL number…" autofocus>
+      <select id="cls">
+        <option value="">UK + PI</option>
+        <option value="UK">UK reference only</option>
+        <option value="PI">Parallel imports only</option>
+      </select>
+      <select id="type">
+        <option value="">All types</option>
+        <option value="Spc">SPC</option>
+        <option value="Pil">PIL</option>
+        <option value="Par">PAR</option>
+      </select>
+      <label class="muted" style="display:flex;gap:6px;align-items:center;font-size:13px;white-space:nowrap"><input type="checkbox" id="intext"> search inside text</label>
+      <button class="pager-btn" id="export-csv" title="Download all matching rows as CSV">⤓ CSV</button>
+    </div>
+    <div id="company-chip" class="bar" hidden style="margin-top:-6px">
+      <span class="muted" style="font-size:13px">Holder:</span>
+      <span class="cls cls-PI" id="company-chip-name" style="font-size:13px"></span>
+      <span class="pis-toggle" id="company-clear" style="color:var(--accent)">✕ clear</span>
+    </div>
+    <table><thead><tr>
+      <th>Product</th><th>Substance</th><th>PL number</th><th>MAH / holder</th><th>Class</th><th>Type</th><th>Updated</th><th>First authorised</th><th></th>
+    </tr></thead><tbody id="rows"></tbody></table>
+    <div id="rows-empty" class="empty" hidden>No matches.</div>
+    <div class="pager">
+      <button id="prev">‹ Prev</button>
+      <span class="muted" id="pageinfo">page 1</span>
+      <button id="next">Next ›</button>
+      <span style="flex:1"></span>
+      <span class="muted" id="totalinfo"></span>
+      <label class="muted" style="font-size:13px">per page
+        <select id="size">
+          <option value="25">25</option>
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+          <option value="200">200</option>
+        </select>
+      </label>
+    </div>
+  </div>
+
+  <div id="changes-view" hidden>
+    <div class="bar">
+      <select id="ckind">
+        <option value="">All changes</option>
+        <option value="changed">Changed (redline)</option>
+        <option value="new">New</option>
+        <option value="removed">Removed</option>
+      </select>
+      <span style="flex:1"></span>
+      <label class="muted" style="font-size:13px">since <input type="date" id="rsince" style="padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--fg)"></label>
+      <button class="pager-btn" id="report-open">Open change report ▸</button>
+      <button class="pager-btn" id="report-dl">Download</button>
+    </div>
+    <table><thead><tr>
+      <th>When</th><th>Kind</th><th>Product</th><th>PL</th><th>Type</th><th>What changed</th><th></th>
+    </tr></thead><tbody id="crows"></tbody></table>
+    <div id="crows-empty" class="empty" hidden>No changes recorded yet. The monitor populates this on its next run after a document updates on MHRA.</div>
+  </div>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmtPL=s=>(s||'').split(',').map(p=>{p=p.trim();const m=p.replace(/\s/g,'').match(/^([A-Z]+)(\d{5})(\d{4})$/);return m?`${m[1]}/${m[2]}/${m[3]}`:p;}).join(', ');
+let page=0, q='', type='', cls='', intext='', company='', size=50, pages=1;
+
+function queryString(){
+  return `q=${encodeURIComponent(q)}&type=${type}&cls=${cls}&intext=${intext}&company=${encodeURIComponent(company)}&size=${size}`;
+}
+
+async function loadStats(){
+  const d=await (await fetch('/api/counts')).json();
+  const c=d.counts||{}, cl=d.classes||{};
+  let s=`${d.total.toLocaleString()} docs · SPC ${(c.Spc||0).toLocaleString()} · PIL ${(c.Pil||0).toLocaleString()} · PAR ${(c.Par||0).toLocaleString()}`;
+  s+=` · UK ${(cl.UK||0).toLocaleString()} · PI ${(cl.PI||0).toLocaleString()} · ${d.mirrored.toLocaleString()} mirrored`;
+  if(d.last_run) s+=` · last check ${d.last_run.run_at.slice(0,16).replace('T',' ')}`;
+  $('#stats').textContent=s;
+}
+
+function mahCell(r){
+  const label = r.mah ? esc(r.mah) : (r.company_no ? `co. ${esc(r.company_no)}` : '');
+  if(!r.company_no) return label;
+  const cls = r.mah ? '' : 'muted';
+  return `<span class="mah-link ${cls}" data-company="${esc(r.company_no)}" title="show all products from this holder" style="cursor:pointer">${label}</span>`;
+}
+
+function rowHtml(r){
+  const pis = r.pl_class==='UK'
+    ? `<span class="pis-toggle" data-storage="${r.storage_name}">show PIs ▸</span>`
+    : '';
+  return `<tr data-storage="${r.storage_name}">
+    <td>${esc(r.product_name)}</td>
+    <td class="muted">${esc(r.substance)}</td>
+    <td class="pl">${esc(fmtPL(r.pl_number))}</td>
+    <td>${mahCell(r)}</td>
+    <td><span class="cls cls-${r.pl_class}">${r.pl_class}</span></td>
+    <td><span class="pill ${r.doc_type}">${r.doc_type.toUpperCase()}</span></td>
+    <td class="muted">${(r.created||'').slice(0,10)}</td>
+    <td class="muted" title="Date of first authorisation (SPC §9)">${r.grant_date||''}</td>
+    <td><a href="/pdf/${r.storage_name}" target="_blank">view PDF</a>${r.local?'<span class="local">local</span>':''}
+        ${pis?'<br>'+pis:''}</td>
+  </tr>`;
+}
+
+async function search(){
+  const d=await (await fetch(`/api/search?${queryString()}&page=${page}`)).json();
+  const rows=d.rows||[];
+  page=d.page; pages=d.pages||1;
+  $('#rows-empty').hidden=rows.length>0;
+  $('#rows').innerHTML=rows.map(rowHtml).join('');
+  $('#pageinfo').textContent=`page ${page+1} of ${pages}`;
+  const from=d.total?page*d.size+1:0, to=Math.min((page+1)*d.size, d.total);
+  $('#totalinfo').textContent=d.total?`${from.toLocaleString()}–${to.toLocaleString()} of ${d.total.toLocaleString()} records`:'0 records';
+  $('#prev').disabled=page===0;
+  $('#next').disabled=page>=pages-1;
+  // company filter chip
+  $('#company-chip').hidden=!company;
+  if(company) $('#company-chip-name').textContent=d.company_name||('co. '+company);
+}
+
+function piTable(title, list){
+  if(!list.length) return '';
+  return `<h4>${esc(title)} (${list.length})</h4><table><tbody>`+
+    list.map(r=>`<tr>
+      <td>${esc(r.product_name)}</td>
+      <td class="pl">${esc(fmtPL(r.pl_number))}</td>
+      <td><b>${mahCell(r)}</b></td>
+      <td><span class="pill ${r.doc_type}">${r.doc_type.toUpperCase()}</span></td>
+      <td class="muted">${(r.created||'').slice(0,10)}</td>
+      <td class="muted" title="PL grant date">${r.grant_date||''}</td>
+      <td><a href="/pdf/${r.storage_name}" target="_blank">view PDF</a>${r.local?'<span class="local">local</span>':''}</td>
+    </tr>`).join('')+`</tbody></table>`;
+}
+
+async function togglePIs(el){
+  const sn=el.dataset.storage, tr=el.closest('tr');
+  if(tr.nextElementSibling && tr.nextElementSibling.classList.contains('pirow')){
+    tr.nextElementSibling.remove(); el.textContent='show PIs ▸'; return;
+  }
+  el.textContent='loading…';
+  const d=await (await fetch(`/api/related?storage=${sn}`)).json();
+  const inner = (d.by_name.length||d.by_substance.length)
+    ? piTable('Parallel imports — exact product-name match', d.by_name)+
+      piTable('Same active substance (possible PI variants)', d.by_substance)
+    : `<div class="muted">No parallel-import products found for this reference.</div>`;
+  const row=document.createElement('tr');
+  row.className='pirow';
+  row.innerHTML=`<td colspan="9"><div class="pinner">${inner}</div></td>`;
+  tr.after(row);
+  el.textContent='hide PIs ▾';
+}
+
+async function loadChanges(){
+  const kind=$('#ckind').value;
+  const d=await (await fetch(`/api/changes?kind=${kind}`)).json();
+  const rows=d.rows||[];
+  $('#crows-empty').hidden=rows.length>0;
+  $('#crows').innerHTML=rows.map(r=>`<tr>
+    <td class="muted">${(r.run_at||'').slice(0,16).replace('T',' ')}</td>
+    <td class="kind-${r.kind}">${r.kind}</td>
+    <td>${esc(r.product_name)}</td>
+    <td class="pl">${esc(fmtPL(r.pl_number))}</td>
+    <td><span class="pill ${r.doc_type}">${(r.doc_type||'').toUpperCase()}</span></td>
+    <td class="muted">${esc(r.detail)||''}</td>
+    <td>${r.has_diff?`<a href="/diff/${r.diff_pdf.split('/').pop()}" target="_blank">redline ▸</a>`
+        :(r.new_storage?`<a href="/pdf/${r.new_storage}" target="_blank">view</a>`:'')}</td>
+  </tr>`).join('');
+}
+
+let t;
+$('#q').addEventListener('input',e=>{q=e.target.value;page=0;clearTimeout(t);t=setTimeout(search,250)});
+$('#type').addEventListener('change',e=>{type=e.target.value;page=0;search()});
+$('#cls').addEventListener('change',e=>{cls=e.target.value;page=0;search()});
+$('#intext').addEventListener('change',e=>{intext=e.target.checked?'1':'';page=0;search()});
+$('#prev').onclick=()=>{if(page>0){page--;search()}};
+$('#next').onclick=()=>{if(page<pages-1){page++;search()}};
+$('#size').addEventListener('change',e=>{size=+e.target.value;page=0;search()});
+$('#rows').addEventListener('click',e=>{
+  const t=e.target.closest('.pis-toggle'); if(t){togglePIs(t);return;}
+  const m=e.target.closest('.mah-link'); if(m){company=m.dataset.company;page=0;search();}
+});
+$('#company-clear').onclick=()=>{company='';page=0;search()};
+$('#export-csv').onclick=()=>window.open(`/export.csv?${queryString()}`,'_blank');
+$('#ckind').onchange=loadChanges;
+
+function reportUrl(download){
+  const since=$('#rsince').value;
+  let u='/report/changes.html?'+(since?`since=${since}`:'last_run=1');
+  if(download) u+='&download=1';
+  return u;
+}
+$('#report-open').onclick=()=>window.open(reportUrl(false),'_blank');
+$('#report-dl').onclick=()=>window.open(reportUrl(true),'_blank');
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');
+  const t=b.dataset.tab;
+  $('#search-view').hidden=t!=='search';
+  $('#changes-view').hidden=t!=='changes';
+  if(t==='changes') loadChanges();
+});
+
+loadStats(); search();
+</script>
+</body>
+</html>

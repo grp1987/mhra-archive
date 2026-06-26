@@ -1,0 +1,8 @@
+# never commit the passcode or the generated launcher
+secret_pw.txt
+_task_launch.cmd
+# sqlite WAL sidecars
+mhra.db-wal
+mhra.db-shm
+__pycache__/
+*.pyc
