@@ -6,3 +6,4 @@ mhra.db-wal
 mhra.db-shm
 __pycache__/
 *.pyc
+service.log

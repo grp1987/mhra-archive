@@ -20,9 +20,11 @@ if (-not (Test-Path $pwFile)) {
 $pw = (Get-Content $pwFile -Raw).Trim()
 if (-not $pw) { Write-Host "secret_pw.txt is empty." -ForegroundColor Red; exit 1 }
 
-# --- python + deps ---
-$py = "C:\Program Files\Python312\python.exe"
-if (-not (Test-Path $py)) { $py = "python" }
+# --- python (resolve to a FULL path so a service running as LocalSystem finds it) ---
+$py = (Get-Command python -ErrorAction SilentlyContinue).Source
+if (-not $py) { $py = "C:\Program Files\Python312\python.exe" }
+if (-not (Test-Path $py)) { Write-Host "python not found - install Python or fix PATH." -ForegroundColor Red; exit 1 }
+Write-Host "using python: $py"
 Write-Host "--- installing deps ---"
 & $py -m pip install -q -r (Join-Path $PSScriptRoot 'requirements.txt')
 
@@ -39,30 +41,30 @@ if (-not (Get-NetFirewallRule -DisplayName "MHRA Archive $Port" -ErrorAction Sil
     Write-Host "opened firewall TCP $Port" -ForegroundColor Green
 }
 
-# --- scheduled task: runs at startup, BelowNormal priority, restarts on failure ---
-$action  = New-ScheduledTaskAction -Execute $py -Argument 'serve_vps.py' -WorkingDirectory $PSScriptRoot
-$trigger = New-ScheduledTaskTrigger -AtStartup
-# BelowNormal priority (7) so it never competes with ORO; env passes port + passcode
-$settings = New-ScheduledTaskSettingsSet -Priority 7 -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) `
-    -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-$env:MHRA_PW = $pw; $env:PORT = "$Port"; $env:HOST = '0.0.0.0'
+# --- install as an NSSM Windows service (same mechanism as Golfsito/ORO) ---
+# NSSM is more robust than a scheduled task: full python path, its own env, auto
+# restart, BelowNormal priority, survives logout/reboot.
+$nssm = "C:\nssm\nssm.exe"
+if (-not (Test-Path $nssm)) { $nssm = (Get-Command nssm -ErrorAction SilentlyContinue).Source }
+if (-not $nssm) { Write-Host "nssm.exe not found (expected C:\nssm\nssm.exe)." -ForegroundColor Red; exit 1 }
 
+# clean up any earlier scheduled-task attempt
+Stop-ScheduledTask   -TaskName $Task -ErrorAction SilentlyContinue
 Unregister-ScheduledTask -TaskName $Task -Confirm:$false -ErrorAction SilentlyContinue
-Register-ScheduledTask -TaskName $Task -Action $action -Trigger $trigger -Settings $settings `
-    -RunLevel Highest -User 'SYSTEM' -Force | Out-Null
-Write-Host "registered scheduled task '$Task' (starts at boot, BelowNormal priority)" -ForegroundColor Green
+& $nssm stop $Task 2>$null; & $nssm remove $Task confirm 2>$null
 
-# the scheduled task runs under SYSTEM which won't see this shell's env vars, so
-# write a tiny launcher the task actually executes, carrying the passcode/port.
-$launcher = Join-Path $PSScriptRoot '_task_launch.cmd'
-"@echo off`r`nset MHRA_PW=$pw`r`nset PORT=$Port`r`nset HOST=0.0.0.0`r`ncd /d `"$PSScriptRoot`"`r`n`"$py`" serve_vps.py" |
-    Set-Content -Path $launcher -Encoding ASCII
-$action2 = New-ScheduledTaskAction -Execute $launcher -WorkingDirectory $PSScriptRoot
-Set-ScheduledTask -TaskName $Task -Action $action2 | Out-Null
-
-Start-ScheduledTask -TaskName $Task
+& $nssm install $Task $py "serve_vps.py"
+& $nssm set $Task AppDirectory $PSScriptRoot
+& $nssm set $Task AppEnvironmentExtra "MHRA_PW=$pw" "PORT=$Port" "HOST=0.0.0.0"
+& $nssm set $Task Start SERVICE_AUTO_START
+& $nssm set $Task AppPriority BELOW_NORMAL_PRIORITY_CLASS
+& $nssm set $Task AppStdout (Join-Path $PSScriptRoot 'service.log')
+& $nssm set $Task AppStderr (Join-Path $PSScriptRoot 'service.log')
+& $nssm start $Task
 Start-Sleep 3
+
 Write-Host "`nServing on  https://${ip}:$Port   (TLS self-signed + passcode gate ON)" -ForegroundColor Cyan
-Write-Host "(browser will warn 'not trusted' once for the self-signed cert - click through; the connection is encrypted)" -ForegroundColor DarkGray
-Write-Host "Stop with:   Stop-ScheduledTask -TaskName $Task ; Unregister-ScheduledTask -TaskName $Task -Confirm:`$false"
-Write-Host "Update DB:   git pull  (then)  Restart-ScheduledTask -TaskName $Task"
+Write-Host "(browser warns 'not trusted' once for the self-signed cert - click through; connection is encrypted)" -ForegroundColor DarkGray
+Write-Host "Status:  & '$nssm' status $Task    Logs: service.log"
+Write-Host "Stop:    & '$nssm' stop $Task       Remove: & '$nssm' remove $Task confirm"
+Write-Host "Update:  git pull ; & '$nssm' restart $Task"
