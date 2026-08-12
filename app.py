@@ -10,11 +10,12 @@ import hashlib
 import os
 
 from flask import (Flask, request, jsonify, render_template, send_file, abort,
-                   Response, redirect, make_response)
+                   Response, redirect, make_response, stream_with_context)
 
 import db
 import download
 import report
+import r2_store
 
 app = Flask(__name__)
 PUBLIC_PREFIX = os.environ.get("PUBLIC_PREFIX", "").rstrip("/")
@@ -232,16 +233,48 @@ def api_changes():
 
 @app.route("/pdf/<storage_name>")
 def pdf(storage_name):
-    """Serve the local mirror copy if present; else stream from MHRA blob."""
+    """Serve local/R2 archived copies first; use the live MHRA blob as fallback."""
     if not storage_name.isalnum():
         abort(400)
     local = download._path_for(storage_name)
     if os.path.exists(local):
         return send_file(local, mimetype="application/pdf")
     con = db.connect()
-    row = con.execute("SELECT url FROM docs WHERE storage_name=?", (storage_name,)).fetchone()
+    row = con.execute(
+        """SELECT d.url, f.path FROM docs d LEFT JOIN files f
+           ON f.storage_name=d.storage_name WHERE d.storage_name=?""",
+        (storage_name,),
+    ).fetchone()
     if not row:
         abort(404)
+    if (row["path"] or "").startswith("r2://"):
+        try:
+            requested_range = request.headers.get("Range")
+            obj = r2_store.open_object(storage_name, requested_range)
+            body = obj["Body"]
+
+            def chunks():
+                try:
+                    while True:
+                        chunk = body.read(64 * 1024)
+                        if not chunk:
+                            break
+                        yield chunk
+                finally:
+                    body.close()
+
+            headers = {
+                "Content-Length": str(obj["ContentLength"]),
+                "Accept-Ranges": "bytes",
+                "Cache-Control": "private, max-age=3600",
+            }
+            if obj.get("ContentRange"):
+                headers["Content-Range"] = obj["ContentRange"]
+            return Response(stream_with_context(chunks()),
+                            status=206 if requested_range else 200,
+                            mimetype="application/pdf", headers=headers)
+        except Exception:  # R2 outage should not hide a still-live MHRA document.
+            app.logger.exception("R2 read failed for %s; using MHRA source", storage_name)
     import urllib.request
     req = urllib.request.Request(row["url"], headers={"User-Agent": "mhra-archive/1.0"})
     with urllib.request.urlopen(req, timeout=60) as r:

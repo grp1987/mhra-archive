@@ -11,10 +11,12 @@ import datetime
 import os
 import sys
 import time
+import tempfile
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import db
+import r2_store
 
 STORE = os.path.join(os.path.dirname(__file__), "store")
 
@@ -48,26 +50,31 @@ def _fetch(url, dest, timeout=90, retries=3):
             time.sleep(1.5 * (attempt + 1))
 
 
-def pending(con, types):
+def pending(con, types, storage="local"):
     """Docs of the wanted types that aren't recorded as downloaded yet."""
     ph = ",".join("?" * len(types))
+    extra = ""
+    if storage == "r2":
+        # A local mirror row does not mean this version has reached R2.
+        extra = "AND (f.path IS NULL OR f.path NOT LIKE 'r2://%')"
     rows = con.execute(
         f"""SELECT d.storage_name, d.url FROM docs d
             LEFT JOIN files f ON f.storage_name=d.storage_name
-            WHERE d.doc_type IN ({ph}) AND f.storage_name IS NULL""",
-        types,
+            WHERE d.doc_type IN ({ph})
+              AND (f.storage_name IS NULL OR ?='r2') {extra}""",
+        [*types, storage],
     ).fetchall()
     return [(r["storage_name"], r["url"]) for r in rows]
 
 
-def run(types, limit=None, workers=8):
+def run(types, limit=None, workers=8, storage="local"):
     con = db.connect()
     db.init(con)
-    todo = pending(con, types)
+    todo = pending(con, types, storage)
     if limit:
         todo = todo[:limit]
     total = len(todo)
-    print(f"{total} files to download (types={types}, workers={workers})")
+    print(f"{total} files to archive (types={types}, storage={storage}, workers={workers})")
     if not total:
         return
 
@@ -77,6 +84,24 @@ def run(types, limit=None, workers=8):
 
     def work(item):
         name, url = item
+        if storage == "r2":
+            # Use one temporary file per worker, upload it privately, then remove it.
+            # This keeps the VPS disk footprint bounded while the archive grows.
+            tmp = None
+            try:
+                fd, tmp = tempfile.mkstemp(prefix="mhra-", suffix=".pdf")
+                os.close(fd)
+                n = _fetch(url, tmp)
+                key, n = r2_store.upload_file(name, tmp)
+                return name, f"r2://{key}", n, None
+            except Exception as e:  # noqa: BLE001
+                return name, "", 0, str(e)
+            finally:
+                if tmp and os.path.exists(tmp):
+                    try:
+                        os.remove(tmp)
+                    except OSError:
+                        pass
         dest = _path_for(name)
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         if os.path.exists(dest):
@@ -123,5 +148,7 @@ if __name__ == "__main__":
     ap.add_argument("--types", default="Spc,Pil")
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--storage", choices=("local", "r2"), default="local")
     args = ap.parse_args()
-    run([t.strip() for t in args.types.split(",") if t.strip()], args.limit, args.workers)
+    run([t.strip() for t in args.types.split(",") if t.strip()], args.limit,
+        args.workers, args.storage)

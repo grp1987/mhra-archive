@@ -6,6 +6,7 @@ from pathlib import Path
 
 import boto3
 from botocore.config import Config
+from botocore.exceptions import ClientError
 
 
 HERE = Path(__file__).resolve().parent
@@ -42,3 +43,44 @@ def client_and_bucket():
         config=Config(signature_version="s3v4", retries={"max_attempts": 5, "mode": "standard"}),
     )
     return client, cfg["R2_BUCKET"]
+
+
+def object_key(storage_name: str) -> str:
+    """Stable, immutable key for an MHRA document version."""
+    if not storage_name.isalnum():
+        raise ValueError("Invalid MHRA storage name")
+    return f"mhra/documents/{storage_name[:2]}/{storage_name}.pdf"
+
+
+def upload_file(storage_name: str, path: str) -> tuple[str, int]:
+    """Upload a PDF privately, returning its R2 key and byte count."""
+    client, bucket = client_and_bucket()
+    key = object_key(storage_name)
+    client.upload_file(
+        path,
+        bucket,
+        key,
+        ExtraArgs={"ContentType": "application/pdf"},
+    )
+    return key, os.path.getsize(path)
+
+
+def open_object(storage_name: str, byte_range: str | None = None):
+    """Open a private object. The caller must close response['Body']."""
+    client, bucket = client_and_bucket()
+    kwargs = {"Bucket": bucket, "Key": object_key(storage_name)}
+    if byte_range:
+        kwargs["Range"] = byte_range
+    return client.get_object(**kwargs)
+
+
+def object_exists(storage_name: str) -> bool:
+    client, bucket = client_and_bucket()
+    try:
+        client.head_object(Bucket=bucket, Key=object_key(storage_name))
+        return True
+    except ClientError as exc:
+        status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+        if status == 404:
+            return False
+        raise

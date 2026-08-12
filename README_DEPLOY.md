@@ -48,3 +48,25 @@ Remove-NetFirewallRule -DisplayName "MHRA Archive 8090"
 | `serve_vps.py` | waitress production entrypoint |
 | `run_vps.ps1` | one-shot setup: deps + firewall + scheduled task |
 | `mhra.db` | slim catalog DB |
+# Private R2 document archive
+
+`r2.env` holds the private Cloudflare R2 credentials on the VPS and must never
+be committed. Verify access with `python test_r2.py`.
+
+Archive a small test batch first:
+
+```powershell
+python download.py --storage r2 --types Spc,Pil,Par --limit 5 --workers 2
+```
+
+Then archive every known version (safe to stop and rerun):
+
+```powershell
+python download.py --storage r2 --types Spc,Pil,Par --workers 4
+```
+
+Objects are stored as `mhra/documents/<first-two>/<storage-hash>.pdf`. A changed
+MHRA document has a different storage hash, so it creates a new object rather
+than overwriting the previous version. The `files` table records `r2://...` for
+uploaded versions. Keep `mhra.db` backed up: it contains the catalogue and the
+links between current and previous versions.
