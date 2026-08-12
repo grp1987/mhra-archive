@@ -78,8 +78,10 @@ def build_html(con, rows, title, window, base=""):
  td{{padding:7px 8px;border-bottom:1px solid #f0f0f0;vertical-align:top}}
  .pl{{font-family:ui-monospace,monospace;font-size:12px;white-space:nowrap}}
  a{{color:#1763d6;text-decoration:none}} a:hover{{text-decoration:underline}}
+ .home{{display:inline-block;margin-bottom:14px;font-weight:650}}
  .summary{{background:#f7f8fa;border:1px solid #e6e8ec;border-radius:8px;padding:12px 16px}}
 </style></head><body>
+<a class="home" href="/THIL">← Home</a>
 <h1>{esc(title)}</h1>
 <div class="win">{esc(window)} · generated {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC</div>
 <div class="summary"><b>{len(by.get('new',[]))}</b> new &nbsp;·&nbsp;
