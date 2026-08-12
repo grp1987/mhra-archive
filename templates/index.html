@@ -5,20 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MHRA Archive</title>
 <style>
-  :root{--bg:#0f1115;--panel:#171a21;--border:#2a2f3a;--fg:#e6e9ef;--muted:#8b93a3;
-        --accent:#4f8cff;--spc:#4f8cff;--pil:#3fbf7f;--par:#c08cff;
-        --new:#3fbf7f;--changed:#f0b429;--removed:#e85d5d}
+  :root{--bg:#f5f5f5;--panel:#ffffff;--border:#d6d6d6;--fg:#303133;--muted:#707070;
+        --accent:#e41e2e;--accent-dark:#bd1725;--spc:#bd1725;--pil:#2d8a4e;--par:#707070;
+        --new:#2d8a4e;--changed:#b56b00;--removed:#e41e2e}
   *{box-sizing:border-box}
   body{margin:0;font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
        background:var(--bg);color:var(--fg)}
-  header{padding:14px 22px;border-bottom:1px solid var(--border);display:flex;
-         align-items:baseline;gap:14px;flex-wrap:wrap;background:var(--panel)}
+  header{padding:14px 22px;border-bottom:4px solid var(--accent);display:flex;
+         align-items:baseline;gap:14px;flex-wrap:wrap;background:var(--panel);box-shadow:0 2px 12px #0000000d}
   header h1{font-size:18px;margin:0;font-weight:650}
   header .stats{color:var(--muted);font-size:13px}
   .tabs{display:flex;gap:4px;margin-left:auto}
   .tabs button{background:none;border:1px solid var(--border);color:var(--muted);
        padding:6px 14px;border-radius:7px;cursor:pointer;font-size:14px}
   .tabs button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .tabs button:hover,.pager button:hover,.pager-btn:hover{border-color:var(--accent);color:var(--accent)}
+  .tabs button.on:hover{background:var(--accent-dark);border-color:var(--accent-dark);color:#fff}
   main{padding:18px 22px;max-width:1200px;margin:0 auto}
   .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
   input[type=search]{flex:1;min-width:260px;padding:10px 14px;border-radius:9px;
@@ -29,28 +31,28 @@
   th{text-align:left;color:var(--muted);font-weight:550;padding:8px 10px;
      border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg)}
   td{padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top}
-  tr:hover td{background:#1b1f28}
+  tr:hover td{background:#fff4f5}
   .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600}
-  .Spc{background:rgba(79,140,255,.18);color:var(--spc)}
-  .Pil{background:rgba(63,191,127,.18);color:var(--pil)}
-  .Par{background:rgba(192,140,255,.18);color:var(--par)}
+  .Spc{background:#fdebed;color:var(--spc)}
+  .Pil{background:#e8f5ec;color:var(--pil)}
+  .Par{background:#ededed;color:var(--par)}
   .kind-new{color:var(--new)} .kind-changed{color:var(--changed)} .kind-removed{color:var(--removed)}
   a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
   .muted{color:var(--muted)} .pl{font-family:ui-monospace,monospace;font-size:12.5px}
   .pager{display:flex;gap:10px;align-items:center;margin-top:16px}
   .pager button{padding:7px 16px;border-radius:8px;border:1px solid var(--border);
        background:var(--panel);color:var(--fg);cursor:pointer}
-  .local{font-size:11px;color:var(--pil);border:1px solid rgba(63,191,127,.4);
+  .local{font-size:11px;color:var(--pil);border:1px solid #9bcbaa;
        padding:1px 6px;border-radius:5px;margin-left:6px}
   .empty{color:var(--muted);padding:40px;text-align:center}
   .cls{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600}
-  .cls-UK{background:rgba(139,147,163,.16);color:#aeb6c6}
-  .cls-PI{background:rgba(240,180,41,.16);color:var(--changed)}
+  .cls-UK{background:#ededed;color:#555}
+  .cls-PI{background:#fff0d6;color:var(--changed)}
   .pis-toggle{cursor:pointer;font-size:13px;white-space:nowrap}
-  .pirow td{background:#12151c;padding:0}
+  .pirow td{background:#fafafa;padding:0}
   .pinner{padding:8px 10px 12px 28px}
   .pinner h4{margin:4px 0 8px;font-size:12.5px;color:var(--muted);font-weight:600}
-  .pinner table{font-size:13px} .pinner td{border-bottom:1px solid #20242e}
+  .pinner table{font-size:13px} .pinner td{border-bottom:1px solid #e5e5e5}
   .pager-btn{padding:8px 14px;border-radius:8px;border:1px solid var(--border);
        background:var(--panel);color:var(--fg);cursor:pointer;font-size:13px}
   .pager-btn:hover{border-color:var(--accent)}
