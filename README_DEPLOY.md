@@ -67,6 +67,7 @@ python download.py --storage r2 --types Spc,Pil,Par --workers 4
 
 Objects are stored as `mhra/documents/<first-two>/<storage-hash>.pdf`. A changed
 MHRA document has a different storage hash, so it creates a new object rather
-than overwriting the previous version. The `files` table records `r2://...` for
-uploaded versions. Keep `mhra.db` backed up: it contains the catalogue and the
-links between current and previous versions.
+than overwriting the previous version. The persistent, gitignored
+`r2_archive.db` records completed uploads separately from the deployable
+`mhra.db` catalogue. Back up both databases: together they contain the catalogue,
+links between versions, and the private R2 object register.

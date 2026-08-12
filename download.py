@@ -53,16 +53,18 @@ def _fetch(url, dest, timeout=90, retries=3):
 def pending(con, types, storage="local"):
     """Docs of the wanted types that aren't recorded as downloaded yet."""
     ph = ",".join("?" * len(types))
-    extra = ""
     if storage == "r2":
-        # A local mirror row does not mean this version has reached R2.
-        extra = "AND (f.path IS NULL OR f.path NOT LIKE 'r2://%')"
+        archived = r2_store.archived_names()
+        rows = con.execute(
+            f"SELECT storage_name,url FROM docs WHERE doc_type IN ({ph})", types
+        ).fetchall()
+        return [(r["storage_name"], r["url"]) for r in rows
+                if r["storage_name"] not in archived]
     rows = con.execute(
         f"""SELECT d.storage_name, d.url FROM docs d
             LEFT JOIN files f ON f.storage_name=d.storage_name
-            WHERE d.doc_type IN ({ph})
-              AND (f.storage_name IS NULL OR ?='r2') {extra}""",
-        [*types, storage],
+            WHERE d.doc_type IN ({ph}) AND f.storage_name IS NULL""",
+        types,
     ).fetchall()
     return [(r["storage_name"], r["url"]) for r in rows]
 
@@ -124,22 +126,34 @@ def run(types, limit=None, workers=8, storage="local"):
             bytes_total += n
             batch.append((name, dest, n, datetime.datetime.utcnow().isoformat() + "Z"))
             if len(batch) >= 200:
-                con.executemany(
-                    "INSERT OR REPLACE INTO files(storage_name,path,bytes,downloaded) VALUES(?,?,?,?)",
-                    batch,
-                )
-                con.commit()
+                if storage == "r2":
+                    r2_store.record_archived(
+                        [(name, path.removeprefix("r2://"), n, at)
+                         for name, path, n, at in batch]
+                    )
+                else:
+                    con.executemany(
+                        "INSERT OR REPLACE INTO files(storage_name,path,bytes,downloaded) VALUES(?,?,?,?)",
+                        batch,
+                    )
+                    con.commit()
                 batch.clear()
             if done % 500 == 0:
                 rate = done / (time.time() - t0)
                 eta = (total - done) / rate / 60 if rate else 0
                 print(f"  {done}/{total}  {bytes_total/1e9:.2f} GB  {rate:.0f}/s  ETA {eta:.0f} min")
         if batch:
-            con.executemany(
-                "INSERT OR REPLACE INTO files(storage_name,path,bytes,downloaded) VALUES(?,?,?,?)",
-                batch,
-            )
-            con.commit()
+            if storage == "r2":
+                r2_store.record_archived(
+                    [(name, path.removeprefix("r2://"), n, at)
+                     for name, path, n, at in batch]
+                )
+            else:
+                con.executemany(
+                    "INSERT OR REPLACE INTO files(storage_name,path,bytes,downloaded) VALUES(?,?,?,?)",
+                    batch,
+                )
+                con.commit()
     print(f"done: {done} files, {bytes_total/1e9:.2f} GB in {(time.time()-t0)/60:.1f} min")
 
 

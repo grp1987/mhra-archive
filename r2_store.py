@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 from pathlib import Path
 
 import boto3
@@ -10,6 +11,7 @@ from botocore.exceptions import ClientError
 
 
 HERE = Path(__file__).resolve().parent
+INDEX_PATH = Path(os.environ.get("R2_INDEX_PATH", HERE / "r2_archive.db"))
 
 
 def load_env(path: Path | None = None) -> dict[str, str]:
@@ -84,3 +86,48 @@ def object_exists(storage_name: str) -> bool:
         if status == 404:
             return False
         raise
+
+
+def _index():
+    con = sqlite3.connect(INDEX_PATH, timeout=15)
+    con.row_factory = sqlite3.Row
+    con.execute("PRAGMA journal_mode=WAL")
+    con.execute("PRAGMA busy_timeout=10000")
+    con.execute(
+        """CREATE TABLE IF NOT EXISTS objects (
+               storage_name TEXT PRIMARY KEY,
+               object_key TEXT NOT NULL,
+               bytes INTEGER NOT NULL,
+               archived_at TEXT NOT NULL
+           )"""
+    )
+    con.commit()
+    return con
+
+
+def archived_names() -> set[str]:
+    with _index() as con:
+        return {row["storage_name"] for row in
+                con.execute("SELECT storage_name FROM objects")}
+
+
+def is_archived(storage_name: str) -> bool:
+    with _index() as con:
+        return con.execute(
+            "SELECT 1 FROM objects WHERE storage_name=?", (storage_name,)
+        ).fetchone() is not None
+
+
+def record_archived(rows) -> None:
+    with _index() as con:
+        con.executemany(
+            """INSERT OR REPLACE INTO objects
+               (storage_name, object_key, bytes, archived_at) VALUES (?,?,?,?)""",
+            rows,
+        )
+        con.commit()
+
+
+def archived_count() -> int:
+    with _index() as con:
+        return con.execute("SELECT COUNT(*) FROM objects").fetchone()[0]

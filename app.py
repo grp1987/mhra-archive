@@ -74,7 +74,8 @@ def index():
 def api_counts():
     con = db.connect()
     c = db.counts(con)
-    mirrored = con.execute("SELECT COUNT(*) FROM files").fetchone()[0]
+    mirrored = max(con.execute("SELECT COUNT(*) FROM files").fetchone()[0],
+                   r2_store.archived_count())
     snap = con.execute(
         "SELECT run_at,total,n_new,n_removed,n_changed FROM snapshots ORDER BY id DESC LIMIT 1"
     ).fetchone()
@@ -240,14 +241,11 @@ def pdf(storage_name):
     if os.path.exists(local):
         return send_file(local, mimetype="application/pdf")
     con = db.connect()
-    row = con.execute(
-        """SELECT d.url, f.path FROM docs d LEFT JOIN files f
-           ON f.storage_name=d.storage_name WHERE d.storage_name=?""",
-        (storage_name,),
-    ).fetchone()
+    row = con.execute("SELECT url FROM docs WHERE storage_name=?",
+                      (storage_name,)).fetchone()
     if not row:
         abort(404)
-    if (row["path"] or "").startswith("r2://"):
+    if r2_store.is_archived(storage_name):
         try:
             requested_range = request.headers.get("Range")
             obj = r2_store.open_object(storage_name, requested_range)
