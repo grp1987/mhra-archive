@@ -111,16 +111,39 @@ def api_search():
     except ValueError:
         size = 50
     size = min(max(size, 10), 500)
-    total = db.search_count(con, q=q, doc_type=doc_type, pl_class=pl_class,
-                            company=company, in_text=in_text)
+    matched = db.search(con, q=q, doc_type=doc_type, pl_class=pl_class,
+                        company=company, in_text=in_text, limit=1000000, offset=0)
+    grouped = {}
+    for row in matched:
+        key = (row.get("pl_number") or "", row.get("name_key") or "",
+               row.get("company_no") or "", row.get("pl_class") or "")
+        group = grouped.get(key)
+        if group is None:
+            group = dict(row)
+            group["documents"] = {}
+            grouped[key] = group
+        dtype = (row.get("doc_type") or "").lower()
+        current = group["documents"].get(dtype)
+        if dtype in ("spc", "pil", "par") and (
+                not current or (row.get("created") or "") > (current.get("created") or "")):
+            group["documents"][dtype] = {
+                "storage_name": row.get("storage_name"),
+                "created": row.get("created"),
+                "local": False,
+            }
+        if (row.get("created") or "") > (group.get("created") or ""):
+            group["created"] = row.get("created")
+            group["storage_name"] = row.get("storage_name")
+    rows_all = sorted(grouped.values(), key=lambda r: (r.get("created") or ""), reverse=True)
+    total = len(rows_all)
     pages = max(1, (total + size - 1) // size)
     page = min(page, pages - 1)
-    rows = db.search(con, q=q, doc_type=doc_type, pl_class=pl_class, company=company,
-                     in_text=in_text, limit=size, offset=page * size)
+    rows = rows_all[page * size:(page + 1) * size]
     have = {r["storage_name"] for r in
             con.execute("SELECT storage_name FROM files").fetchall()}
     for r in rows:
-        r["local"] = r["storage_name"] in have
+        for document in r["documents"].values():
+            document["local"] = document["storage_name"] in have
     company_name = None
     if company:
         row = con.execute("SELECT name FROM mah WHERE company_no=?", (company,)).fetchone()

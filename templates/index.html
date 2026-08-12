@@ -56,6 +56,10 @@
   .pager-btn{padding:8px 14px;border-radius:8px;border:1px solid var(--border);
        background:var(--panel);color:var(--fg);cursor:pointer;font-size:13px}
   .pager-btn:hover{border-color:var(--accent)}
+  .doc-actions{white-space:nowrap}.doc-btn{display:inline-block;padding:5px 9px;border-radius:5px;
+       color:#fff;font-size:12px;font-weight:700;text-decoration:none;margin:1px 3px 1px 0}
+  .doc-btn:hover{text-decoration:none;filter:brightness(.92)}.doc-spc{background:var(--accent)}
+  .doc-pil{background:var(--pil)}.doc-par{background:var(--muted)}
 </style>
 </head>
 <body>
@@ -158,6 +162,12 @@ function mahCell(r){
 }
 
 function rowHtml(r){
+  const docOrder=['spc','pil','par'];
+  const available=docOrder.filter(t=>r.documents&&r.documents[t]);
+  const buttons=available.map(t=>{
+    const d=r.documents[t], label=t.toUpperCase();
+    return `<a class="doc-btn doc-${t}" href="${BASE}/pdf/${d.storage_name}" target="_blank" title="Open ${label}">${label}</a>${d.local?'<span class="local">local</span>':''}`;
+  }).join(' ');
   const pis = r.pl_class==='UK'
     ? `<span class="pis-toggle" data-storage="${r.storage_name}">show PIs ▸</span>`
     : '';
@@ -167,10 +177,10 @@ function rowHtml(r){
     <td class="pl">${esc(fmtPL(r.pl_number))}</td>
     <td>${mahCell(r)}</td>
     <td><span class="cls cls-${r.pl_class}">${r.pl_class}</span></td>
-    <td><span class="pill ${r.doc_type}">${r.doc_type.toUpperCase()}</span></td>
+    <td>${available.map(t=>`<span class="pill ${t[0].toUpperCase()+t.slice(1)}">${t.toUpperCase()}</span>`).join(' ')}</td>
     <td class="muted">${(r.created||'').slice(0,10)}</td>
     <td class="muted" title="Date of first authorisation (SPC §9)">${r.grant_date||''}</td>
-    <td><a href="${BASE}/pdf/${r.storage_name}" target="_blank">view PDF</a>${r.local?'<span class="local">local</span>':''}
+    <td class="doc-actions">${buttons}
         ${pis?'<br>'+pis:''}</td>
   </tr>`;
 }
