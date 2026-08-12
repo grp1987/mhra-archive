@@ -1,0 +1,33 @@
+# Replace the existing grpsite.co.uk block with this block.
+grpsite.co.uk, www.grpsite.co.uk {
+	encode gzip
+
+	route {
+		# A direct MHRA URL is authenticated before Caddy removes the path prefix.
+		redir /THIL/mhra /THIL/mhra/ 308
+		handle_path /THIL/mhra/* {
+			forward_auth 127.0.0.1:8095 {
+				uri /auth/check?app=mhra
+			}
+			reverse_proxy https://127.0.0.1:8091 {
+				transport http {
+					tls_insecure_skip_verify
+				}
+			}
+		}
+
+		# Login, dashboard, admin, and protected PID placeholder.
+		handle /THIL* {
+			reverse_proxy 127.0.0.1:8095
+		}
+
+		# Keep the existing root-domain MHRA site available during transition.
+		handle {
+			reverse_proxy https://127.0.0.1:8090 {
+				transport http {
+					tls_insecure_skip_verify
+				}
+			}
+		}
+	}
+}

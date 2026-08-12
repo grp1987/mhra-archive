@@ -129,6 +129,7 @@
   </div>
 </main>
 <script>
+const BASE={{ public_prefix|tojson }};
 const $=s=>document.querySelector(s);
 const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmtPL=s=>(s||'').split(',').map(p=>{p=p.trim();const m=p.replace(/\s/g,'').match(/^([A-Z]+)(\d{5})(\d{4})$/);return m?`${m[1]}/${m[2]}/${m[3]}`:p;}).join(', ');
@@ -139,7 +140,7 @@ function queryString(){
 }
 
 async function loadStats(){
-  const d=await (await fetch('/api/counts')).json();
+  const d=await (await fetch(`${BASE}/api/counts`)).json();
   const c=d.counts||{}, cl=d.classes||{};
   let s=`${d.total.toLocaleString()} docs · SPC ${(c.Spc||0).toLocaleString()} · PIL ${(c.Pil||0).toLocaleString()} · PAR ${(c.Par||0).toLocaleString()}`;
   s+=` · UK ${(cl.UK||0).toLocaleString()} · PI ${(cl.PI||0).toLocaleString()} · ${d.mirrored.toLocaleString()} mirrored`;
@@ -167,13 +168,13 @@ function rowHtml(r){
     <td><span class="pill ${r.doc_type}">${r.doc_type.toUpperCase()}</span></td>
     <td class="muted">${(r.created||'').slice(0,10)}</td>
     <td class="muted" title="Date of first authorisation (SPC §9)">${r.grant_date||''}</td>
-    <td><a href="/pdf/${r.storage_name}" target="_blank">view PDF</a>${r.local?'<span class="local">local</span>':''}
+    <td><a href="${BASE}/pdf/${r.storage_name}" target="_blank">view PDF</a>${r.local?'<span class="local">local</span>':''}
         ${pis?'<br>'+pis:''}</td>
   </tr>`;
 }
 
 async function search(){
-  const d=await (await fetch(`/api/search?${queryString()}&page=${page}`)).json();
+  const d=await (await fetch(`${BASE}/api/search?${queryString()}&page=${page}`)).json();
   const rows=d.rows||[];
   page=d.page; pages=d.pages||1;
   $('#rows-empty').hidden=rows.length>0;
@@ -198,7 +199,7 @@ function piTable(title, list){
       <td><span class="pill ${r.doc_type}">${r.doc_type.toUpperCase()}</span></td>
       <td class="muted">${(r.created||'').slice(0,10)}</td>
       <td class="muted" title="PL grant date">${r.grant_date||''}</td>
-      <td><a href="/pdf/${r.storage_name}" target="_blank">view PDF</a>${r.local?'<span class="local">local</span>':''}</td>
+      <td><a href="${BASE}/pdf/${r.storage_name}" target="_blank">view PDF</a>${r.local?'<span class="local">local</span>':''}</td>
     </tr>`).join('')+`</tbody></table>`;
 }
 
@@ -208,7 +209,7 @@ async function togglePIs(el){
     tr.nextElementSibling.remove(); el.textContent='show PIs ▸'; return;
   }
   el.textContent='loading…';
-  const d=await (await fetch(`/api/related?storage=${sn}`)).json();
+  const d=await (await fetch(`${BASE}/api/related?storage=${sn}`)).json();
   const inner = (d.by_name.length||d.by_substance.length)
     ? piTable('Parallel imports — exact product-name match', d.by_name)+
       piTable('Same active substance (possible PI variants)', d.by_substance)
@@ -222,7 +223,7 @@ async function togglePIs(el){
 
 async function loadChanges(){
   const kind=$('#ckind').value;
-  const d=await (await fetch(`/api/changes?kind=${kind}`)).json();
+  const d=await (await fetch(`${BASE}/api/changes?kind=${kind}`)).json();
   const rows=d.rows||[];
   $('#crows-empty').hidden=rows.length>0;
   $('#crows').innerHTML=rows.map(r=>`<tr>
@@ -232,8 +233,8 @@ async function loadChanges(){
     <td class="pl">${esc(fmtPL(r.pl_number))}</td>
     <td><span class="pill ${r.doc_type}">${(r.doc_type||'').toUpperCase()}</span></td>
     <td class="muted">${esc(r.detail)||''}</td>
-    <td>${r.has_diff?`<a href="/diff/${r.diff_pdf.split('/').pop()}" target="_blank">redline ▸</a>`
-        :(r.new_storage?`<a href="/pdf/${r.new_storage}" target="_blank">view</a>`:'')}</td>
+    <td>${r.has_diff?`<a href="${BASE}/diff/${r.diff_pdf.split('/').pop()}" target="_blank">redline ▸</a>`
+        :(r.new_storage?`<a href="${BASE}/pdf/${r.new_storage}" target="_blank">view</a>`:'')}</td>
   </tr>`).join('');
 }
 
@@ -250,12 +251,12 @@ $('#rows').addEventListener('click',e=>{
   const m=e.target.closest('.mah-link'); if(m){company=m.dataset.company;page=0;search();}
 });
 $('#company-clear').onclick=()=>{company='';page=0;search()};
-$('#export-csv').onclick=()=>window.open(`/export.csv?${queryString()}`,'_blank');
+$('#export-csv').onclick=()=>window.open(`${BASE}/export.csv?${queryString()}`,'_blank');
 $('#ckind').onchange=loadChanges;
 
 function reportUrl(download){
   const since=$('#rsince').value;
-  let u='/report/changes.html?'+(since?`since=${since}`:'last_run=1');
+  let u=`${BASE}/report/changes.html?`+(since?`since=${since}`:'last_run=1');
   if(download) u+='&download=1';
   return u;
 }

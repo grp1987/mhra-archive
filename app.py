@@ -17,6 +17,7 @@ import download
 import report
 
 app = Flask(__name__)
+PUBLIC_PREFIX = os.environ.get("PUBLIC_PREFIX", "").rstrip("/")
 
 # --- optional password gate -------------------------------------------------
 # Set MHRA_PW to require a passcode (used on the internet-facing VPS deploy).
@@ -65,7 +66,7 @@ def pwlogin():
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", public_prefix=PUBLIC_PREFIX)
 
 
 @app.route("/api/counts")

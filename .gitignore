@@ -7,3 +7,7 @@ mhra.db-shm
 __pycache__/
 *.pyc
 service.log
+thil_users.db
+thil_secret.txt
+THIL-Portal.log
+THIL-MHRA.log
