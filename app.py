@@ -252,11 +252,6 @@ def pdf(storage_name):
     local = download._path_for(storage_name)
     if os.path.exists(local):
         return send_file(local, mimetype="application/pdf")
-    con = db.connect()
-    row = con.execute("SELECT url FROM docs WHERE storage_name=?",
-                      (storage_name,)).fetchone()
-    if not row:
-        abort(404)
     if r2_store.is_archived(storage_name):
         try:
             requested_range = request.headers.get("Range")
@@ -285,6 +280,11 @@ def pdf(storage_name):
                             mimetype="application/pdf", headers=headers)
         except Exception:  # R2 outage should not hide a still-live MHRA document.
             app.logger.exception("R2 read failed for %s; using MHRA source", storage_name)
+    con = db.connect()
+    row = con.execute("SELECT url FROM docs WHERE storage_name=?",
+                      (storage_name,)).fetchone()
+    if not row:
+        abort(404)
     import urllib.request
     req = urllib.request.Request(row["url"], headers={"User-Agent": "mhra-archive/1.0"})
     with urllib.request.urlopen(req, timeout=60) as r:

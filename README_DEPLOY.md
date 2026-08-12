@@ -71,3 +71,16 @@ than overwriting the previous version. The persistent, gitignored
 `r2_archive.db` records completed uploads separately from the deployable
 `mhra.db` catalogue. Back up both databases: together they contain the catalogue,
 links between versions, and the private R2 object register.
+
+## Nightly change monitoring
+
+After the initial R2 archive completes, run `install_nightly.ps1` once from an
+elevated PowerShell. It copies the catalogue and R2 register into the persistent,
+gitignored `data/` directory, refreshes today's catalogue as a clean baseline,
+restarts the website against that live data, and installs `THIL-MHRA-Nightly` at
+02:00 daily.
+
+Each nightly run records new, changed and removed logical documents in the
+append-only `changes` table, then archives new hashes to R2. The website Change
+Log supports from/to dates and links to current and previous archived PDFs.
+Output is appended to `nightly.log`.

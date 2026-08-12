@@ -12,10 +12,12 @@ import json
 import os
 import sqlite3
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "mhra.db")
+DB_PATH = os.environ.get("MHRA_DB_PATH",
+                         os.path.join(os.path.dirname(__file__), "mhra.db"))
 
 
-def connect(path=DB_PATH):
+def connect(path=None):
+    path = path or DB_PATH
     con = sqlite3.connect(path, timeout=15)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA journal_mode=WAL")
