@@ -5,7 +5,8 @@ import sqlite3
 import time
 from functools import wraps
 
-from flask import Flask, abort, flash, redirect, render_template, request, session, url_for
+from flask import (Flask, abort, flash, redirect, render_template, request,
+                   send_from_directory, session, url_for)
 from werkzeug.security import check_password_hash, generate_password_hash
 
 
@@ -127,6 +128,13 @@ def dashboard():
     if not user:
         return redirect("/THIL/login")
     return render_template("thil_dashboard.html")
+
+
+@app.get("/THIL/brand-logo")
+def brand_logo():
+    if not current_user():
+        abort(404)
+    return send_from_directory(os.path.join(HERE, "static"), "target_healthcare_logo.png")
 
 
 @app.get("/auth/check")
