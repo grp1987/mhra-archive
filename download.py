@@ -50,16 +50,18 @@ def _fetch(url, dest, timeout=90, retries=3):
             time.sleep(1.5 * (attempt + 1))
 
 
-def pending(con, types, storage="local"):
+def pending(con, types, storage="local", retry_unavailable=False):
     """Docs of the wanted types that aren't recorded as downloaded yet."""
     ph = ",".join("?" * len(types))
     if storage == "r2":
         archived = r2_store.archived_names()
+        unavailable = set() if retry_unavailable else r2_store.unavailable_names()
         rows = con.execute(
             f"SELECT storage_name,url FROM docs WHERE doc_type IN ({ph})", types
         ).fetchall()
         return [(r["storage_name"], r["url"]) for r in rows
-                if r["storage_name"] not in archived]
+                if r["storage_name"] not in archived and
+                r["storage_name"] not in unavailable]
     rows = con.execute(
         f"""SELECT d.storage_name, d.url FROM docs d
             LEFT JOIN files f ON f.storage_name=d.storage_name
@@ -69,10 +71,10 @@ def pending(con, types, storage="local"):
     return [(r["storage_name"], r["url"]) for r in rows]
 
 
-def run(types, limit=None, workers=8, storage="local"):
+def run(types, limit=None, workers=8, storage="local", retry_unavailable=False):
     con = db.connect()
     db.init(con)
-    todo = pending(con, types, storage)
+    todo = pending(con, types, storage, retry_unavailable)
     if limit:
         todo = todo[:limit]
     total = len(todo)
@@ -81,6 +83,9 @@ def run(types, limit=None, workers=8, storage="local"):
         return
 
     done = 0
+    succeeded = 0
+    unavailable = 0
+    failed = 0
     bytes_total = 0
     t0 = time.time()
 
@@ -95,9 +100,9 @@ def run(types, limit=None, workers=8, storage="local"):
                 os.close(fd)
                 n = _fetch(url, tmp)
                 key, n = r2_store.upload_file(name, tmp)
-                return name, f"r2://{key}", n, None
+                return name, f"r2://{key}", n, None, False
             except Exception as e:  # noqa: BLE001
-                return name, "", 0, str(e)
+                return name, "", 0, str(e), getattr(e, "code", None) == 404
             finally:
                 if tmp and os.path.exists(tmp):
                     try:
@@ -107,24 +112,33 @@ def run(types, limit=None, workers=8, storage="local"):
         dest = _path_for(name)
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         if os.path.exists(dest):
-            return name, dest, os.path.getsize(dest), None
+            return name, dest, os.path.getsize(dest), None, False
         try:
             n = _fetch(url, dest)
-            return name, dest, n, None
+            return name, dest, n, None, False
         except Exception as e:  # noqa: BLE001
-            return name, dest, 0, str(e)
+            return name, dest, 0, str(e), getattr(e, "code", None) == 404
 
     with ThreadPoolExecutor(max_workers=workers) as ex:
         futs = [ex.submit(work, it) for it in todo]
         batch = []
         for fut in as_completed(futs):
-            name, dest, n, err = fut.result()
+            name, dest, n, err, is_unavailable = fut.result()
             done += 1
             if err:
                 print(f"  ! {name[:12]} {err}", file=sys.stderr)
+                if is_unavailable and storage == "r2":
+                    unavailable += 1
+                    r2_store.record_unavailable(
+                        name, err, datetime.datetime.now(datetime.UTC).isoformat()
+                    )
+                else:
+                    failed += 1
                 continue
+            succeeded += 1
             bytes_total += n
-            batch.append((name, dest, n, datetime.datetime.utcnow().isoformat() + "Z"))
+            archived_at = datetime.datetime.now(datetime.UTC).isoformat()
+            batch.append((name, dest, n, archived_at))
             if len(batch) >= 200:
                 if storage == "r2":
                     r2_store.record_archived(
@@ -154,7 +168,8 @@ def run(types, limit=None, workers=8, storage="local"):
                     batch,
                 )
                 con.commit()
-    print(f"done: {done} files, {bytes_total/1e9:.2f} GB in {(time.time()-t0)/60:.1f} min")
+    print(f"done: {succeeded} archived, {unavailable} unavailable at MHRA, "
+          f"{failed} failed, {bytes_total/1e9:.2f} GB in {(time.time()-t0)/60:.1f} min")
 
 
 if __name__ == "__main__":
@@ -163,6 +178,7 @@ if __name__ == "__main__":
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--storage", choices=("local", "r2"), default="local")
+    ap.add_argument("--retry-unavailable", action="store_true")
     args = ap.parse_args()
     run([t.strip() for t in args.types.split(",") if t.strip()], args.limit,
-        args.workers, args.storage)
+        args.workers, args.storage, args.retry_unavailable)

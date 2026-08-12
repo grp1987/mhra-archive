@@ -101,6 +101,13 @@ def _index():
                archived_at TEXT NOT NULL
            )"""
     )
+    con.execute(
+        """CREATE TABLE IF NOT EXISTS unavailable (
+               storage_name TEXT PRIMARY KEY,
+               reason TEXT NOT NULL,
+               checked_at TEXT NOT NULL
+           )"""
+    )
     con.commit()
     return con
 
@@ -109,6 +116,12 @@ def archived_names() -> set[str]:
     with _index() as con:
         return {row["storage_name"] for row in
                 con.execute("SELECT storage_name FROM objects")}
+
+
+def unavailable_names() -> set[str]:
+    with _index() as con:
+        return {row["storage_name"] for row in
+                con.execute("SELECT storage_name FROM unavailable")}
 
 
 def is_archived(storage_name: str) -> bool:
@@ -124,6 +137,18 @@ def record_archived(rows) -> None:
             """INSERT OR REPLACE INTO objects
                (storage_name, object_key, bytes, archived_at) VALUES (?,?,?,?)""",
             rows,
+        )
+        con.executemany("DELETE FROM unavailable WHERE storage_name=?",
+                        [(row[0],) for row in rows])
+        con.commit()
+
+
+def record_unavailable(storage_name: str, reason: str, checked_at: str) -> None:
+    with _index() as con:
+        con.execute(
+            """INSERT OR REPLACE INTO unavailable
+               (storage_name, reason, checked_at) VALUES (?,?,?)""",
+            (storage_name, reason[:500], checked_at),
         )
         con.commit()
 
