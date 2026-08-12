@@ -141,9 +141,11 @@ def force_password_change():
 
 @app.get("/THIL/change-password")
 def change_password():
-    if not current_user():
+    user = current_user()
+    if not user:
         return redirect("/THIL/login")
-    return render_template("thil_change_password.html", minimum=MIN_PASSWORD_LENGTH)
+    return render_template("thil_change_password.html", minimum=MIN_PASSWORD_LENGTH,
+                           forced=bool(user["must_change_password"]))
 
 
 @app.post("/THIL/change-password")
@@ -154,7 +156,10 @@ def change_password_post():
         return redirect("/THIL/login")
     password = request.form.get("password", "")
     confirm = request.form.get("confirm", "")
-    if len(password) < MIN_PASSWORD_LENGTH:
+    current = request.form.get("current_password", "")
+    if not user["must_change_password"] and not check_password_hash(user["password_hash"], current):
+        flash("Your current password is incorrect.", "error")
+    elif len(password) < MIN_PASSWORD_LENGTH:
         flash(f"Password must be at least {MIN_PASSWORD_LENGTH} characters.", "error")
     elif password != confirm:
         flash("The passwords do not match.", "error")
@@ -239,7 +244,8 @@ def create_user():
 def update_user(uid):
     require_csrf()
     me = current_user()
-    if uid == me["id"] and ("active" not in request.form or "is_admin" not in request.form):
+    active = request.form.get("account_status", "active") == "active"
+    if uid == me["id"] and (not active or "is_admin" not in request.form):
         flash("You cannot disable or remove administrator rights from your own account.", "error")
         return redirect("/THIL/admin")
     password = request.form.get("password", "")
@@ -249,7 +255,7 @@ def update_user(uid):
     with connect() as con:
         con.execute("UPDATE users SET is_admin=?,can_mhra=?,can_pid=?,active=? WHERE id=?",
                     ("is_admin" in request.form, "can_mhra" in request.form,
-                     "can_pid" in request.form, "active" in request.form, uid))
+                     "can_pid" in request.form, active, uid))
         if password:
             force_change = 0 if uid == me["id"] else 1
             con.execute("UPDATE users SET password_hash=?,must_change_password=? WHERE id=?",
