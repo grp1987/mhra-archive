@@ -11,3 +11,5 @@ thil_users.db
 thil_secret.txt
 THIL-Portal.log
 THIL-MHRA.log
+r2.env
+r2_archive.db
