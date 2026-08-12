@@ -22,6 +22,7 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME=60 * 60 * 12,
 )
 _attempts = {}
+MIN_PASSWORD_LENGTH = 8
 
 
 def password_hash(password):
@@ -42,6 +43,9 @@ def init_db():
             can_mhra INTEGER NOT NULL DEFAULT 0, can_pid INTEGER NOT NULL DEFAULT 0,
             active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
+        columns = {row[1] for row in con.execute("PRAGMA table_info(users)")}
+        if "must_change_password" not in columns:
+            con.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
 
 
 def current_user():
@@ -108,6 +112,8 @@ def login_post():
     session.permanent = True
     session["uid"] = user["id"]
     csrf()
+    if user["must_change_password"]:
+        return redirect("/THIL/change-password")
     nxt = request.args.get("next", "/THIL")
     if not nxt.startswith("/THIL") or nxt.startswith("//"):
         nxt = "/THIL"
@@ -119,6 +125,48 @@ def logout():
     require_csrf()
     session.clear()
     return redirect("/THIL/login")
+
+
+@app.before_request
+def force_password_change():
+    user = current_user()
+    if not user or not user["must_change_password"]:
+        return None
+    allowed = {"change_password", "change_password_post", "logout", "brand_logo"}
+    if request.endpoint not in allowed:
+        if request.path == "/auth/check":
+            return redirect("/THIL/change-password")
+        return redirect("/THIL/change-password")
+
+
+@app.get("/THIL/change-password")
+def change_password():
+    if not current_user():
+        return redirect("/THIL/login")
+    return render_template("thil_change_password.html", minimum=MIN_PASSWORD_LENGTH)
+
+
+@app.post("/THIL/change-password")
+def change_password_post():
+    require_csrf()
+    user = current_user()
+    if not user:
+        return redirect("/THIL/login")
+    password = request.form.get("password", "")
+    confirm = request.form.get("confirm", "")
+    if len(password) < MIN_PASSWORD_LENGTH:
+        flash(f"Password must be at least {MIN_PASSWORD_LENGTH} characters.", "error")
+    elif password != confirm:
+        flash("The passwords do not match.", "error")
+    elif check_password_hash(user["password_hash"], password):
+        flash("Choose a different password from your temporary password.", "error")
+    else:
+        with connect() as con:
+            con.execute("UPDATE users SET password_hash=?,must_change_password=0 WHERE id=?",
+                        (password_hash(password), user["id"]))
+        flash("Your password has been changed.", "ok")
+        return redirect("/THIL")
+    return redirect("/THIL/change-password")
 
 
 @app.get("/THIL")
@@ -172,12 +220,12 @@ def create_user():
     require_csrf()
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
-    if not username or len(username) > 64 or len(password) < 12:
-        flash("Use a username and a password of at least 12 characters.", "error")
+    if not username or len(username) > 64 or len(password) < MIN_PASSWORD_LENGTH:
+        flash(f"Use a username and a temporary password of at least {MIN_PASSWORD_LENGTH} characters.", "error")
         return redirect("/THIL/admin")
     try:
         with connect() as con:
-            con.execute("INSERT INTO users(username,password_hash,is_admin,can_mhra,can_pid) VALUES(?,?,?,?,?)",
+            con.execute("INSERT INTO users(username,password_hash,is_admin,can_mhra,can_pid,must_change_password) VALUES(?,?,?,?,?,1)",
                         (username, password_hash(password), "is_admin" in request.form,
                          "can_mhra" in request.form, "can_pid" in request.form))
         flash("User created.", "ok")
@@ -195,15 +243,17 @@ def update_user(uid):
         flash("You cannot disable or remove administrator rights from your own account.", "error")
         return redirect("/THIL/admin")
     password = request.form.get("password", "")
-    if password and len(password) < 12:
-        flash("New passwords must be at least 12 characters.", "error")
+    if password and len(password) < MIN_PASSWORD_LENGTH:
+        flash(f"New passwords must be at least {MIN_PASSWORD_LENGTH} characters.", "error")
         return redirect("/THIL/admin")
     with connect() as con:
         con.execute("UPDATE users SET is_admin=?,can_mhra=?,can_pid=?,active=? WHERE id=?",
                     ("is_admin" in request.form, "can_mhra" in request.form,
                      "can_pid" in request.form, "active" in request.form, uid))
         if password:
-            con.execute("UPDATE users SET password_hash=? WHERE id=?", (password_hash(password), uid))
+            force_change = 0 if uid == me["id"] else 1
+            con.execute("UPDATE users SET password_hash=?,must_change_password=? WHERE id=?",
+                        (password_hash(password), force_change, uid))
     flash("User updated.", "ok")
     return redirect("/THIL/admin")
 

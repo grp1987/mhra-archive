@@ -7,12 +7,12 @@ from thil_portal import connect, init_db, password_hash
 
 def main():
     username = (sys.argv[1] if len(sys.argv) > 1 else input("Admin username [admin]: ").strip() or "admin")
-    password = getpass.getpass("New password (12+ characters): ")
+    password = getpass.getpass("New password (8+ characters): ")
     confirm = getpass.getpass("Confirm password: ")
     if password != confirm:
         raise SystemExit("Passwords do not match.")
-    if len(password) < 12:
-        raise SystemExit("Password must be at least 12 characters.")
+    if len(password) < 8:
+        raise SystemExit("Password must be at least 8 characters.")
     init_db()
     with connect() as con:
         existing = con.execute("SELECT id FROM users WHERE username=?", (username,)).fetchone()
