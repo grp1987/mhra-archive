@@ -28,15 +28,15 @@ def gather(con, since=None, until=None, last_run=False, kinds=("new", "changed",
             sql += "AND run_at>=? "
             params.append(since)
         if until:
-            sql += "AND run_at<=? "
-            params.append(until)
+            sql += "AND run_at<? "
+            params.append(until + "T23:59:59.999999Z" if len(until) == 10 else until)
     ph = ",".join("?" * len(kinds))
     sql += f"AND kind IN ({ph}) ORDER BY kind, product_name"
     params += list(kinds)
     return [dict(r) for r in con.execute(sql, params).fetchall()]
 
 
-def build_html(con, rows, title, window):
+def build_html(con, rows, title, window, base=""):
     by = {"new": [], "changed": [], "removed": []}
     for r in rows:
         by.setdefault(r["kind"], []).append(r)
@@ -54,11 +54,11 @@ def build_html(con, rows, title, window):
         for r in items:
             links = []
             if r.get("diff_pdf") and os.path.exists(r["diff_pdf"]):
-                links.append(f"<a href='/diff/{esc(os.path.basename(r['diff_pdf']))}'>redline</a>")
+                links.append(f"<a href='{esc(base)}/diff/{esc(os.path.basename(r['diff_pdf']))}'>redline</a>")
             if r.get("new_storage"):
-                links.append(f"<a href='/pdf/{esc(r['new_storage'])}'>new PDF</a>")
+                links.append(f"<a href='{esc(base)}/pdf/{esc(r['new_storage'])}'>new PDF</a>")
             if r.get("old_storage"):
-                links.append(f"<a href='/pdf/{esc(r['old_storage'])}'>previous</a>")
+                links.append(f"<a href='{esc(base)}/pdf/{esc(r['old_storage'])}'>previous</a>")
             out.append(
                 f"<tr><td>{esc(r['product_name'])}</td><td class='pl'>{esc(r['pl_number'])}</td>"
                 f"<td>{esc((r['doc_type'] or '').upper())}</td><td>{esc(r['detail'])}</td>"
@@ -91,14 +91,14 @@ def build_html(con, rows, title, window):
 </body></html>"""
 
 
-def generate(con, since=None, until=None, last_run=False):
+def generate(con, since=None, until=None, last_run=False, base=""):
     rows = gather(con, since=since, until=until, last_run=last_run)
     if last_run:
         snap = con.execute("SELECT run_at FROM snapshots ORDER BY id DESC LIMIT 1").fetchone()
         window = f"Most recent check: {snap['run_at'][:16].replace('T',' ')}" if snap else "No runs yet"
     else:
         window = f"{since or 'beginning'} → {until or 'now'}"
-    return build_html(con, rows, "MHRA Change Report", window), rows
+    return build_html(con, rows, "MHRA Change Report", window, base), rows
 
 
 if __name__ == "__main__":

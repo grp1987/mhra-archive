@@ -124,7 +124,8 @@
         <option value="removed">Removed</option>
       </select>
       <span style="flex:1"></span>
-      <label class="muted" style="font-size:13px">since <input type="date" id="rsince" style="padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--fg)"></label>
+      <label class="muted" style="font-size:13px">from <input type="date" id="rsince" style="padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--fg)"></label>
+      <label class="muted" style="font-size:13px">to <input type="date" id="runtil" style="padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--fg)"></label>
       <button class="pager-btn" id="report-open">Open change report ▸</button>
       <button class="pager-btn" id="report-dl">Download</button>
     </div>
@@ -235,7 +236,8 @@ async function togglePIs(el){
 
 async function loadChanges(){
   const kind=$('#ckind').value;
-  const d=await (await fetch(`${BASE}/api/changes?kind=${kind}`)).json();
+  const since=$('#rsince').value, until=$('#runtil').value;
+  const d=await (await fetch(`${BASE}/api/changes?kind=${kind}&since=${since}&until=${until}`)).json();
   const rows=d.rows||[];
   $('#crows-empty').hidden=rows.length>0;
   $('#crows').innerHTML=rows.map(r=>`<tr>
@@ -245,8 +247,9 @@ async function loadChanges(){
     <td class="pl">${esc(fmtPL(r.pl_number))}</td>
     <td><span class="pill ${r.doc_type}">${(r.doc_type||'').toUpperCase()}</span></td>
     <td class="muted">${esc(r.detail)||''}</td>
-    <td>${r.has_diff?`<a href="${BASE}/diff/${r.diff_pdf.split('/').pop()}" target="_blank">redline ▸</a>`
-        :(r.new_storage?`<a href="${BASE}/pdf/${r.new_storage}" target="_blank">view</a>`:'')}</td>
+    <td>${r.has_diff?`<a href="${BASE}/diff/${r.diff_pdf.split('/').pop()}" target="_blank">redline</a> · `:''}
+        ${r.new_storage?`<a href="${BASE}/pdf/${r.new_storage}" target="_blank">current</a>`:''}
+        ${r.old_storage?` · <a href="${BASE}/pdf/${r.old_storage}" target="_blank">previous</a>`:''}</td>
   </tr>`).join('');
 }
 
@@ -265,10 +268,17 @@ $('#rows').addEventListener('click',e=>{
 $('#company-clear').onclick=()=>{company='';page=0;search()};
 $('#export-csv').onclick=()=>window.open(`${BASE}/export.csv?${queryString()}`,'_blank');
 $('#ckind').onchange=loadChanges;
+$('#rsince').onchange=loadChanges;
+$('#runtil').onchange=loadChanges;
 
 function reportUrl(download){
   const since=$('#rsince').value;
-  let u=`${BASE}/report/changes.html?`+(since?`since=${since}`:'last_run=1');
+  const until=$('#runtil').value;
+  let params=[];
+  if(since) params.push(`since=${since}`);
+  if(until) params.push(`until=${until}`);
+  if(!params.length) params.push('last_run=1');
+  let u=`${BASE}/report/changes.html?${params.join('&')}`;
   if(download) u+='&download=1';
   return u;
 }

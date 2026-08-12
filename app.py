@@ -207,7 +207,8 @@ def report_changes():
     since = request.args.get("since") or None
     until = request.args.get("until") or None
     last_run = request.args.get("last_run") == "1"
-    html_doc, rows = report.generate(con, since=since, until=until, last_run=last_run)
+    html_doc, rows = report.generate(con, since=since, until=until,
+                                     last_run=last_run, base=PUBLIC_PREFIX)
     dl = request.args.get("download") == "1"
     headers = {}
     if dl:
@@ -225,6 +226,17 @@ def api_changes():
     if kind:
         sql += "WHERE kind=? "
         params.append(kind)
+    else:
+        sql += "WHERE 1=1 "
+    since = request.args.get("since", "").strip()
+    until = request.args.get("until", "").strip()
+    if since:
+        sql += "AND run_at>=? "
+        params.append(since)
+    if until:
+        # Include the whole selected end date.
+        sql += "AND run_at<? "
+        params.append(until + "T23:59:59.999999Z")
     sql += "ORDER BY id DESC LIMIT 300"
     rows = [dict(r) for r in con.execute(sql, params).fetchall()]
     for r in rows:
