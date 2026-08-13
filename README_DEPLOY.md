@@ -84,3 +84,12 @@ Each nightly run records new, changed and removed logical documents in the
 append-only `changes` table, then archives new hashes to R2. The website Change
 Log supports from/to dates and links to current and previous archived PDFs.
 Output is appended to `nightly.log`.
+
+## Recovering the original Mac mirror
+
+`upload_existing.py` checks R2 for every locally mirrored hash and uploads only
+objects that are missing. It creates `r2_recovery.db`, an independent register
+for later merging into the VPS live `r2_archive.db`. It does not modify the
+original Mac archive or its database. Keep the R2 environment file outside Git.
+After securely copying `r2_recovery.db` to the VPS, merge it with
+`merge_recovery.py --live data/r2_archive.db --recovery r2_recovery.db`.

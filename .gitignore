@@ -15,3 +15,4 @@ r2.env
 r2_archive.db
 data/
 nightly.log
+r2_recovery.db
