@@ -92,6 +92,15 @@ shows an EPAR page, EU product-information PDF and authorised-presentations PDF
 beside the UK documents. Do not generate EMA URLs automatically: add medicines
 only after confirming the regulatory match and official links.
 
+## Commercial Hub roles
+
+The THIL user table includes explicit Commercial Hub access plus one required
+job role: `sales`, `purchasing` or `management`. Portal administrator status does
+not grant Hub access automatically. The Hub `forward_auth` route must copy
+`X-THIL-User`, `X-THIL-Hub-Role` and `X-THIL-Display-Name` from the successful
+auth response. Set `THIL_HUB_URL` only when the Hub route is live; until then the
+dashboard does not show a broken Commercial Hub application card.
+
 ## Recovering the original Mac mirror
 
 `upload_existing.py` checks R2 for every locally mirrored hash and uploads only

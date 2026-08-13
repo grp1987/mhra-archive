@@ -23,6 +23,14 @@ app.config.update(
 )
 _attempts = {}
 MIN_PASSWORD_LENGTH = 8
+HUB_ROLES = {"sales", "purchasing", "management"}
+HUB_URL = os.environ.get("THIL_HUB_URL", "").strip()
+PILOT_HUB_ROLES = {
+    "grant": "sales",
+    "chris": "sales",
+    "daniel": "purchasing",
+    "emma": "management",
+}
 
 
 def password_hash(password):
@@ -50,6 +58,20 @@ def init_db():
             con.execute("ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER NOT NULL DEFAULT 0")
         if "locked" not in columns:
             con.execute("ALTER TABLE users ADD COLUMN locked INTEGER NOT NULL DEFAULT 0")
+        if "can_hub" not in columns:
+            con.execute("ALTER TABLE users ADD COLUMN can_hub INTEGER NOT NULL DEFAULT 0")
+        if "hub_role" not in columns:
+            con.execute("ALTER TABLE users ADD COLUMN hub_role TEXT")
+        if "display_name" not in columns:
+            con.execute("ALTER TABLE users ADD COLUMN display_name TEXT")
+        # Apply the agreed pilot roster only where no Hub role has been assigned.
+        for username, role in PILOT_HUB_ROLES.items():
+            con.execute(
+                """UPDATE users SET can_hub=1,hub_role=?,
+                   display_name=COALESCE(NULLIF(display_name,''),?)
+                   WHERE username=? COLLATE NOCASE AND (hub_role IS NULL OR hub_role='')""",
+                (role, username.title(), username),
+            )
 
 
 def current_user():
@@ -87,7 +109,7 @@ def admin_required(fn):
 
 @app.context_processor
 def inject_globals():
-    return {"me": current_user(), "csrf_token": csrf()}
+    return {"me": current_user(), "csrf_token": csrf(), "hub_url": HUB_URL}
 
 
 @app.get("/THIL/login")
@@ -214,8 +236,23 @@ def auth_check():
     if not user:
         return redirect(url_for("login", next=original))
     area = request.args.get("app", "")
-    allowed = user["is_admin"] or (area == "mhra" and user["can_mhra"]) or (area == "pid" and user["can_pid"])
-    return ("", 204) if allowed else ("Access denied", 403)
+    if area == "hub":
+        # Portal administrators are not automatically Hub users: the pilot
+        # roster requires an explicit job role for all Hub access.
+        allowed = user["can_hub"] and user["hub_role"] in HUB_ROLES
+    else:
+        allowed = (user["is_admin"] or
+                   (area == "mhra" and user["can_mhra"]) or
+                   (area == "pid" and user["can_pid"]))
+    if not allowed:
+        return "Access denied", 403
+    response = app.response_class("", status=204)
+    if area == "hub":
+        response.headers["X-THIL-User"] = user["username"]
+        response.headers["X-THIL-Hub-Role"] = user["hub_role"]
+        response.headers["X-THIL-Display-Name"] = (user["display_name"] or
+                                                     user["username"].title())
+    return response
 
 
 @app.get("/THIL/PID")
@@ -245,11 +282,20 @@ def create_user():
     if not username or len(username) > 64 or len(password) < MIN_PASSWORD_LENGTH:
         flash(f"Use a username and a temporary password of at least {MIN_PASSWORD_LENGTH} characters.", "error")
         return redirect("/THIL/admin")
+    can_hub = "can_hub" in request.form
+    hub_role = request.form.get("hub_role", "").strip().lower()
+    display_name = request.form.get("display_name", "").strip()
+    if can_hub and hub_role not in HUB_ROLES:
+        flash("Choose a Commercial Hub role when Hub access is enabled.", "error")
+        return redirect("/THIL/admin")
     try:
         with connect() as con:
-            con.execute("INSERT INTO users(username,password_hash,is_admin,can_mhra,can_pid,must_change_password) VALUES(?,?,?,?,?,1)",
+            con.execute("""INSERT INTO users(username,password_hash,is_admin,can_mhra,
+                        can_pid,must_change_password,can_hub,hub_role,display_name)
+                        VALUES(?,?,?,?,?,1,?,?,?)""",
                         (username, password_hash(password), "is_admin" in request.form,
-                         "can_mhra" in request.form, "can_pid" in request.form))
+                         "can_mhra" in request.form, "can_pid" in request.form,
+                         can_hub, hub_role if can_hub else None, display_name or None))
         flash("User created.", "ok")
     except sqlite3.IntegrityError:
         flash("That username already exists.", "error")
@@ -266,17 +312,26 @@ def update_user(uid):
         flash("You cannot disable or remove administrator rights from your own account.", "error")
         return redirect("/THIL/admin")
     password = request.form.get("password", "")
+    can_hub = "can_hub" in request.form
+    hub_role = request.form.get("hub_role", "").strip().lower()
+    display_name = request.form.get("display_name", "").strip()
+    if can_hub and hub_role not in HUB_ROLES:
+        flash("Choose a Commercial Hub role when Hub access is enabled.", "error")
+        return redirect("/THIL/admin")
     if password and len(password) < MIN_PASSWORD_LENGTH:
         flash(f"New passwords must be at least {MIN_PASSWORD_LENGTH} characters.", "error")
         return redirect("/THIL/admin")
     with connect() as con:
         unlock = "unlock_account" in request.form
         con.execute("""UPDATE users SET is_admin=?,can_mhra=?,can_pid=?,active=?,
+                       can_hub=?,hub_role=?,display_name=?,
                        locked=CASE WHEN ? THEN 0 ELSE locked END,
                        failed_login_attempts=CASE WHEN ? THEN 0 ELSE failed_login_attempts END
                        WHERE id=?""",
                     ("is_admin" in request.form, "can_mhra" in request.form,
-                     "can_pid" in request.form, active, unlock, unlock, uid))
+                     "can_pid" in request.form, active, can_hub,
+                     hub_role if can_hub else None, display_name or None,
+                     unlock, unlock, uid))
         if password:
             force_change = 0 if uid == me["id"] else 1
             con.execute("UPDATE users SET password_hash=?,must_change_password=? WHERE id=?",

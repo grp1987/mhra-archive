@@ -21,6 +21,16 @@ grpsite.co.uk, www.grpsite.co.uk {
 			reverse_proxy 127.0.0.1:8095
 		}
 
+		# When the Commercial Hub port is assigned, place its handle BEFORE the
+		# general /THIL* block above and copy the authenticated role headers:
+		# handle /THIL/Hub/* {
+		#     forward_auth 127.0.0.1:8095 {
+		#         uri /auth/check?app=hub
+		#         copy_headers X-THIL-User X-THIL-Hub-Role X-THIL-Display-Name
+		#     }
+		#     reverse_proxy 127.0.0.1:PORT
+		# }
+
 		# Keep the existing root-domain MHRA site available during transition.
 		handle {
 			reverse_proxy https://127.0.0.1:8090 {
