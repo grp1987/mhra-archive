@@ -14,6 +14,7 @@ from flask import (Flask, request, jsonify, render_template, send_file, abort,
 
 import db
 import download
+import ema_links
 import report
 import r2_store
 
@@ -146,6 +147,7 @@ def api_search():
     for r in rows:
         for document in r["documents"].values():
             document["local"] = document["storage_name"] in have
+        r["ema"] = ema_links.for_product(r.get("product_name"))
     company_name = None
     if company:
         row = con.execute("SELECT name FROM mah WHERE company_no=?", (company,)).fetchone()

@@ -85,6 +85,13 @@ append-only `changes` table, then archives new hashes to R2. The website Change
 Log supports from/to dates and links to current and previous archived PDFs.
 Output is appended to `nightly.log`.
 
+## Curated EMA links
+
+`ema_links.py` maps a verified leading brand name to official EMA links. The UI
+shows an EPAR page, EU product-information PDF and authorised-presentations PDF
+beside the UK documents. Do not generate EMA URLs automatically: add medicines
+only after confirming the regulatory match and official links.
+
 ## Recovering the original Mac mirror
 
 `upload_existing.py` checks R2 for every locally mirrored hash and uploads only

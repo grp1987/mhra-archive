@@ -61,6 +61,11 @@
        color:#fff;font-size:12px;font-weight:700;text-decoration:none;margin:1px 3px 1px 0}
   .doc-btn:hover{text-decoration:none;filter:brightness(.92)}.doc-spc{background:var(--accent)}
   .doc-pil{background:var(--pil)}.doc-par{background:var(--muted)}
+  .ema-actions{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px}
+  .ema-btn{display:inline-block;padding:4px 7px;border:1px solid #245b9b;border-radius:5px;
+       color:#245b9b;background:#eef5fc;font-size:11px;font-weight:650;text-decoration:none}
+  .ema-btn:hover{background:#dceafb;text-decoration:none}.ema-label{font-size:10px;color:var(--muted);
+       align-self:center;font-weight:700;letter-spacing:.04em}
 </style>
 </head>
 <body>
@@ -171,6 +176,10 @@ function rowHtml(r){
     const d=r.documents[t], label=t.toUpperCase();
     return `<a class="doc-btn doc-${t}" href="${BASE}/pdf/${d.storage_name}" target="_blank" title="Open ${label}">${label}</a>${d.local?'<span class="local">local</span>':''}`;
   }).join(' ');
+  const ema=r.ema?`<div class="ema-actions"><span class="ema-label">EMA</span>
+    <a class="ema-btn" href="${esc(r.ema.epar_url)}" target="_blank" rel="noopener" title="Open the official EMA medicine page">EPAR page</a>
+    <a class="ema-btn" href="${esc(r.ema.product_info_url)}" target="_blank" rel="noopener" title="Open EU product information">EU Annex</a>
+    <a class="ema-btn" href="${esc(r.ema.presentations_url)}" target="_blank" rel="noopener" title="Open all EMA-authorised presentations">Presentations</a></div>`:'';
   const pis = r.pl_class==='UK'
     ? `<span class="pis-toggle" data-storage="${r.storage_name}">show PIs ▸</span>`
     : '';
@@ -183,7 +192,7 @@ function rowHtml(r){
     <td>${available.map(t=>`<span class="pill ${t[0].toUpperCase()+t.slice(1)}">${t.toUpperCase()}</span>`).join(' ')}</td>
     <td class="muted">${(r.created||'').slice(0,10)}</td>
     <td class="muted" title="Date of first authorisation (SPC §9)">${r.grant_date||''}</td>
-    <td class="doc-actions">${buttons}
+    <td class="doc-actions">${buttons}${ema}
         ${pis?'<br>'+pis:''}</td>
   </tr>`;
 }
