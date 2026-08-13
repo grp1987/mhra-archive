@@ -101,6 +101,12 @@ not grant Hub access automatically. The Hub `forward_auth` route must copy
 auth response. Set `THIL_HUB_URL` only when the Hub route is live; until then the
 dashboard does not show a broken Commercial Hub application card.
 
+The production Hub route is `/THIL/Hub/` and the private service is
+`127.0.0.1:8200`. `install_hub.ps1` provides the Windows-native equivalent of
+the Hub project's Bash `start:prod`: it runs `npm ci`, builds with
+`HUB_BASE_PATH=/THIL/Hub`, and installs `THIL-Commercial-Hub` under NSSM with a
+persistent database at `C:\THIL\data\hub\thi-commercial-hub.sqlite`.
+
 ## Recovering the original Mac mirror
 
 `upload_existing.py` checks R2 for every locally mirrored hash and uploads only

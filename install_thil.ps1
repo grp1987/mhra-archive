@@ -34,7 +34,8 @@ function Install-ServiceSafe($name, $script, $environment) {
 }
 
 Install-ServiceSafe 'THIL-Portal' 'serve_thil.py' @(
-    "THIL_SECRET_KEY=$secret", 'THIL_COOKIE_SECURE=1', 'PORT=8095'
+    "THIL_SECRET_KEY=$secret", 'THIL_COOKIE_SECURE=1', 'PORT=8095',
+    'THIL_HUB_URL=https://www.grpsite.co.uk/THIL/Hub/'
 )
 Install-ServiceSafe 'THIL-MHRA' 'serve_vps.py' @(
     'PORT=8091', 'HOST=127.0.0.1', 'PUBLIC_PREFIX=/THIL/mhra'
