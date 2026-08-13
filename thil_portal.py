@@ -46,6 +46,10 @@ def init_db():
         columns = {row[1] for row in con.execute("PRAGMA table_info(users)")}
         if "must_change_password" not in columns:
             con.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
+        if "failed_login_attempts" not in columns:
+            con.execute("ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER NOT NULL DEFAULT 0")
+        if "locked" not in columns:
+            con.execute("ALTER TABLE users ADD COLUMN locked INTEGER NOT NULL DEFAULT 0")
 
 
 def current_user():
@@ -53,7 +57,9 @@ def current_user():
     if not uid:
         return None
     with connect() as con:
-        return con.execute("SELECT * FROM users WHERE id=? AND active=1", (uid,)).fetchone()
+        return con.execute(
+            "SELECT * FROM users WHERE id=? AND active=1 AND locked=0", (uid,)
+        ).fetchone()
 
 
 def csrf():
@@ -101,9 +107,20 @@ def login_post():
         flash("Too many attempts. Please wait 15 minutes.", "error")
         return redirect("/THIL/login"), 429
     username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
     with connect() as con:
         user = con.execute("SELECT * FROM users WHERE username=? AND active=1", (username,)).fetchone()
-    if not user or not check_password_hash(user["password_hash"], request.form.get("password", "")):
+        valid = bool(user and not user["locked"] and
+                     check_password_hash(user["password_hash"], password))
+        if user and not user["locked"] and not valid:
+            failures = user["failed_login_attempts"] + 1
+            con.execute(
+                "UPDATE users SET failed_login_attempts=?,locked=? WHERE id=?",
+                (failures, failures >= 5, user["id"]),
+            )
+        elif valid:
+            con.execute("UPDATE users SET failed_login_attempts=0 WHERE id=?", (user["id"],))
+    if not valid:
         recent.append(time.time())
         flash("Incorrect username or password.", "error")
         return redirect("/THIL/login")
@@ -253,9 +270,13 @@ def update_user(uid):
         flash(f"New passwords must be at least {MIN_PASSWORD_LENGTH} characters.", "error")
         return redirect("/THIL/admin")
     with connect() as con:
-        con.execute("UPDATE users SET is_admin=?,can_mhra=?,can_pid=?,active=? WHERE id=?",
+        unlock = "unlock_account" in request.form
+        con.execute("""UPDATE users SET is_admin=?,can_mhra=?,can_pid=?,active=?,
+                       locked=CASE WHEN ? THEN 0 ELSE locked END,
+                       failed_login_attempts=CASE WHEN ? THEN 0 ELSE failed_login_attempts END
+                       WHERE id=?""",
                     ("is_admin" in request.form, "can_mhra" in request.form,
-                     "can_pid" in request.form, active, uid))
+                     "can_pid" in request.form, active, unlock, unlock, uid))
         if password:
             force_change = 0 if uid == me["id"] else 1
             con.execute("UPDATE users SET password_hash=?,must_change_password=? WHERE id=?",
