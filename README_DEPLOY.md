@@ -95,7 +95,9 @@ only after confirming the regulatory match and official links.
 ## Commercial Hub roles
 
 The THIL user table includes explicit Commercial Hub access plus one required
-job role: `sales`, `purchasing` or `management`. Portal administrator status does
+job role: `sales`, `purchasing`, `salespurchasing` or `management`. The portal
+labels `salespurchasing` as **Sales & Purchasing** and emits the canonical Hub
+token `SalesPurchasing`. Portal administrator status does
 not grant Hub access automatically. The Hub `forward_auth` route must copy
 `X-THIL-User`, `X-THIL-Hub-Role` and `X-THIL-Display-Name` from the successful
 auth response. Set `THIL_HUB_URL` only when the Hub route is live; until then the

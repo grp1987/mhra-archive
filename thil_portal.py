@@ -23,7 +23,13 @@ app.config.update(
 )
 _attempts = {}
 MIN_PASSWORD_LENGTH = 8
-HUB_ROLES = {"sales", "purchasing", "management"}
+HUB_ROLE_HEADERS = {
+    "sales": "Sales",
+    "purchasing": "Purchasing",
+    "salespurchasing": "SalesPurchasing",
+    "management": "Management",
+}
+HUB_ROLES = set(HUB_ROLE_HEADERS)
 HUB_URL = os.environ.get("THIL_HUB_URL", "").strip()
 PILOT_HUB_ROLES = {
     "grant": "sales",
@@ -249,7 +255,7 @@ def auth_check():
     response = app.response_class("", status=204)
     if area == "hub":
         response.headers["X-THIL-User"] = user["username"]
-        response.headers["X-THIL-Hub-Role"] = user["hub_role"]
+        response.headers["X-THIL-Hub-Role"] = HUB_ROLE_HEADERS[user["hub_role"]]
         response.headers["X-THIL-Display-Name"] = (user["display_name"] or
                                                      user["username"].title())
     return response
